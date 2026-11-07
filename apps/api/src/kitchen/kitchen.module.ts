@@ -1,0 +1,1 @@
+export { KitchenModule } from '../modules';

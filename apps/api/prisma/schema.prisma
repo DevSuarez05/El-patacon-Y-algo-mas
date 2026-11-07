@@ -1,0 +1,1034 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Organization {
+  id        String   @id @db.Uuid
+  name      String
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  branches  Branch[]
+  users     User[]
+  roles     Role[]
+  customers Customer[]
+
+  @@map("organizations")
+}
+
+model Branch {
+  id             String   @id @db.Uuid
+  organizationId String   @map("organization_id") @db.Uuid
+  name           String
+  timezone       String   @default("America/Bogota")
+  currencyCode   String   @default("COP") @map("currency_code")
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  userRoles      UserRole[]
+  sessions       Session[]
+  pins           AuthorizationPin[]
+  auditEvents    AuditEvent[]
+  units          Unit[]
+  inventoryItems InventoryItem[]
+  stockBalances  StockBalance[]
+  categories     Category[]
+  products       Product[]
+  prices         Price[]
+  recipeVersions RecipeVersion[]
+  productionOrders ProductionOrder[]
+  suppliers      Supplier[]
+  purchaseOrders PurchaseOrder[]
+  expenses       Expense[]
+  cashDrawers    CashDrawer[]
+  customers      Customer[]
+  orders         Order[]
+  diningRooms    DiningRoom[]
+  prepStations   PrepStation[]
+  sales          Sale[]
+  payments       Payment[]
+  idempotencyRecords IdempotencyRecord[]
+  taxConfigurations TaxConfiguration[]
+
+  @@unique([organizationId, id])
+  @@map("branches")
+}
+
+model User {
+  id             String   @id @db.Uuid
+  organizationId String   @map("organization_id") @db.Uuid
+  email          String
+  passwordHash   String   @map("password_hash")
+  displayName    String   @map("display_name")
+  active         Boolean  @default(true)
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  userRoles      UserRole[]
+  sessions       Session[]
+  pins           AuthorizationPin[]
+
+  @@unique([organizationId, id])
+  @@unique([organizationId, email])
+  @@map("users")
+}
+
+model Role {
+  id             String   @id @db.Uuid
+  organizationId String   @map("organization_id") @db.Uuid
+  code           String
+  name           String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  rolePermissions RolePermission[]
+  userRoles      UserRole[]
+
+  @@unique([organizationId, id])
+  @@unique([organizationId, code])
+  @@map("roles")
+}
+
+model Permission {
+  id          String @id @db.Uuid
+  code        String @unique
+  description String
+  rolePermissions RolePermission[]
+
+  @@map("permissions")
+}
+
+model RolePermission {
+  roleId       String @map("role_id") @db.Uuid
+  permissionId String @map("permission_id") @db.Uuid
+  role         Role       @relation(fields: [roleId], references: [id])
+  permission   Permission @relation(fields: [permissionId], references: [id])
+
+  @@id([roleId, permissionId])
+  @@map("role_permissions")
+}
+
+model UserRole {
+  id             String @id @db.Uuid
+  organizationId String @map("organization_id") @db.Uuid
+  branchId       String @map("branch_id") @db.Uuid
+  userId         String @map("user_id") @db.Uuid
+  roleId         String @map("role_id") @db.Uuid
+  branch         Branch @relation(fields: [organizationId, branchId], references: [organizationId, id])
+  user           User   @relation(fields: [organizationId, userId], references: [organizationId, id])
+  role           Role   @relation(fields: [organizationId, roleId], references: [organizationId, id])
+
+  @@unique([branchId, userId, roleId])
+  @@map("user_roles")
+}
+
+model Session {
+  id        String   @id @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  branchId  String   @map("branch_id") @db.Uuid
+  tokenHash String   @unique @map("token_hash")
+  expiresAt DateTime @map("expires_at") @db.Timestamptz(6)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  user      User   @relation(fields: [userId], references: [id])
+  branch    Branch @relation(fields: [branchId], references: [id])
+
+  @@map("sessions")
+}
+
+model AuthorizationPin {
+  id        String   @id @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  branchId  String   @map("branch_id") @db.Uuid
+  pinHash   String   @map("pin_hash")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  user      User   @relation(fields: [userId], references: [id])
+  branch    Branch @relation(fields: [branchId], references: [id])
+
+  @@map("authorization_pins")
+}
+
+model AuditEvent {
+  id             String   @id @db.Uuid
+  organizationId String   @map("organization_id") @db.Uuid
+  branchId       String?  @map("branch_id") @db.Uuid
+  actorUserId    String?  @map("actor_user_id") @db.Uuid
+  action         String
+  entityType     String   @map("entity_type")
+  entityId       String?  @map("entity_id") @db.Uuid
+  payload        Json     @default("{}")
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  branch         Branch?  @relation(fields: [branchId], references: [id])
+
+  @@map("audit_events")
+}
+
+model Unit {
+  id        String @id @db.Uuid
+  branchId  String @map("branch_id") @db.Uuid
+  code      String
+  name      String
+  dimension String
+  branch    Branch @relation(fields: [branchId], references: [id])
+  conversionsFrom UnitConversion[] @relation("FromUnit")
+  conversionsTo   UnitConversion[] @relation("ToUnit")
+  inventoryItems   InventoryItem[]
+
+  @@unique([branchId, id])
+  @@unique([branchId, code])
+  @@map("units")
+}
+
+model UnitConversion {
+  id         String  @id @db.Uuid
+  branchId   String  @map("branch_id") @db.Uuid
+  fromUnitId String  @map("from_unit_id") @db.Uuid
+  toUnitId   String  @map("to_unit_id") @db.Uuid
+  factor     Decimal @db.Decimal(18, 6)
+  fromUnit   Unit @relation("FromUnit", fields: [branchId, fromUnitId], references: [branchId, id])
+  toUnit     Unit @relation("ToUnit", fields: [branchId, toUnitId], references: [branchId, id])
+
+  @@unique([branchId, fromUnitId, toUnitId])
+  @@map("unit_conversions")
+}
+
+model InventoryItem {
+  id        String  @id @db.Uuid
+  branchId  String  @map("branch_id") @db.Uuid
+  name      String
+  kind      String
+  unitId    String  @map("unit_id") @db.Uuid
+  active    Boolean @default(true)
+  branch    Branch @relation(fields: [branchId], references: [id])
+  unit      Unit   @relation(fields: [branchId, unitId], references: [branchId, id])
+  balances  StockBalance[]
+  recipeLines RecipeLine[]
+  reservations StockReservation[]
+
+  @@unique([branchId, id])
+  @@map("inventory_items")
+}
+
+model StockBalance {
+  id              String  @id @db.Uuid
+  branchId        String  @map("branch_id") @db.Uuid
+  inventoryItemId String  @map("inventory_item_id") @db.Uuid
+  onHandQty       Decimal @default(0) @map("on_hand_qty") @db.Decimal(18, 6)
+  reservedQty     Decimal @default(0) @map("reserved_qty") @db.Decimal(18, 6)
+  averageCostMinor BigInt @default(0) @map("average_cost_minor")
+  version         Int     @default(0)
+  branch          Branch @relation(fields: [branchId], references: [id])
+  inventoryItem   InventoryItem @relation(fields: [branchId, inventoryItemId], references: [branchId, id])
+
+  @@unique([branchId, inventoryItemId])
+  @@map("stock_balances")
+}
+
+model Category {
+  id       String @id @db.Uuid
+  branchId String @map("branch_id") @db.Uuid
+  name     String
+  branch   Branch @relation(fields: [branchId], references: [id])
+  products Product[]
+
+  @@unique([branchId, id])
+  @@map("categories")
+}
+
+model Product {
+  id               String  @id @db.Uuid
+  branchId         String  @map("branch_id") @db.Uuid
+  categoryId       String  @map("category_id") @db.Uuid
+  name             String
+  active           Boolean @default(true)
+  defaultStationId String? @map("default_station_id") @db.Uuid
+  branch           Branch @relation(fields: [branchId], references: [id])
+  category         Category @relation(fields: [branchId, categoryId], references: [branchId, id])
+  variants         Variant[]
+  prices           Price[]
+  modifierGroups   ModifierGroup[]
+
+  @@unique([branchId, id])
+  @@map("products")
+}
+
+model Variant {
+  id        String @id @db.Uuid
+  branchId  String @map("branch_id") @db.Uuid
+  productId String @map("product_id") @db.Uuid
+  name      String
+  product   Product @relation(fields: [branchId, productId], references: [branchId, id])
+
+  @@unique([branchId, id])
+  @@map("variants")
+}
+
+model ModifierGroup {
+  id        String @id @db.Uuid
+  branchId  String @map("branch_id") @db.Uuid
+  productId String @map("product_id") @db.Uuid
+  name      String
+  product   Product @relation(fields: [branchId, productId], references: [branchId, id])
+  modifiers Modifier[]
+
+  @@unique([branchId, id])
+  @@map("modifier_groups")
+}
+
+model Modifier {
+  id        String @id @db.Uuid
+  branchId  String @map("branch_id") @db.Uuid
+  groupId   String @map("group_id") @db.Uuid
+  name      String
+  group     ModifierGroup @relation(fields: [branchId, groupId], references: [branchId, id])
+
+  @@unique([branchId, id])
+  @@map("modifiers")
+}
+
+model Price {
+  id             String   @id @db.Uuid
+  branchId       String   @map("branch_id") @db.Uuid
+  productId      String   @map("product_id") @db.Uuid
+  variantId      String?  @map("variant_id") @db.Uuid
+  amountMinor    BigInt   @map("amount_minor")
+  effectiveFrom  DateTime @map("effective_from") @db.Timestamptz(6)
+  createdByUserId String  @map("created_by_user_id") @db.Uuid
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  branch         Branch  @relation(fields: [branchId], references: [id])
+  product        Product @relation(fields: [branchId, productId], references: [branchId, id])
+
+  @@map("prices")
+}
+
+model RecipeVersion {
+  id                 String  @id @db.Uuid
+  branchId           String  @map("branch_id") @db.Uuid
+  productId          String? @map("product_id") @db.Uuid
+  preparationItemId  String? @map("preparation_item_id") @db.Uuid
+  versionNumber      Int     @map("version_number")
+  expectedYieldQty   Decimal @map("expected_yield_qty") @db.Decimal(18, 6)
+  createdAt          DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  branch             Branch @relation(fields: [branchId], references: [id])
+  lines              RecipeLine[]
+
+  @@unique([branchId, id])
+  @@map("recipe_versions")
+}
+
+model RecipeLine {
+  id               String  @id @db.Uuid
+  branchId         String  @map("branch_id") @db.Uuid
+  recipeVersionId  String  @map("recipe_version_id") @db.Uuid
+  inventoryItemId  String  @map("inventory_item_id") @db.Uuid
+  quantity         Decimal @db.Decimal(18, 6)
+  unitId           String  @map("unit_id") @db.Uuid
+  recipeVersion    RecipeVersion @relation(fields: [branchId, recipeVersionId], references: [branchId, id])
+  inventoryItem    InventoryItem @relation(fields: [branchId, inventoryItemId], references: [branchId, id])
+
+  @@map("recipe_lines")
+}
+
+model ProductionOrder {
+  id               String   @id @db.Uuid
+  branchId         String   @map("branch_id") @db.Uuid
+  preparationItemId String  @map("preparation_item_id") @db.Uuid
+  recipeVersionId  String   @map("recipe_version_id") @db.Uuid
+  status           String
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  branch           Branch @relation(fields: [branchId], references: [id])
+  lines            ProductionOrderLine[]
+  batches          ProductionBatch[]
+
+  @@unique([branchId, id])
+  @@map("production_orders")
+}
+
+model ProductionOrderLine {
+  id                String  @id @db.Uuid
+  branchId          String  @map("branch_id") @db.Uuid
+  productionOrderId String  @map("production_order_id") @db.Uuid
+  inventoryItemId   String  @map("inventory_item_id") @db.Uuid
+  quantity          Decimal @db.Decimal(18, 6)
+  productionOrder   ProductionOrder @relation(fields: [branchId, productionOrderId], references: [branchId, id])
+
+  @@map("production_order_lines")
+}
+
+model ProductionBatch {
+  id                String   @id @db.Uuid
+  branchId          String   @map("branch_id") @db.Uuid
+  productionOrderId String   @map("production_order_id") @db.Uuid
+  goodQty           Decimal  @map("good_qty") @db.Decimal(18, 6)
+  wasteQty          Decimal  @map("waste_qty") @db.Decimal(18, 6)
+  status            String
+  idempotencyKey    String   @map("idempotency_key")
+  publishedAt       DateTime? @map("published_at") @db.Timestamptz(6)
+  productionOrder   ProductionOrder @relation(fields: [branchId, productionOrderId], references: [branchId, id])
+  lines             ProductionBatchLine[]
+
+  @@unique([branchId, id])
+  @@unique([branchId, idempotencyKey])
+  @@map("production_batches")
+}
+
+model ProductionBatchLine {
+  id                 String  @id @db.Uuid
+  branchId           String  @map("branch_id") @db.Uuid
+  productionBatchId  String  @map("production_batch_id") @db.Uuid
+  inventoryItemId    String  @map("inventory_item_id") @db.Uuid
+  consumedQty        Decimal @map("consumed_qty") @db.Decimal(18, 6)
+  productionBatch    ProductionBatch @relation(fields: [branchId, productionBatchId], references: [branchId, id])
+
+  @@map("production_batch_lines")
+}
+
+model Supplier {
+  id       String @id @db.Uuid
+  branchId String @map("branch_id") @db.Uuid
+  name     String
+  branch   Branch @relation(fields: [branchId], references: [id])
+  orders   PurchaseOrder[]
+
+  @@unique([branchId, id])
+  @@map("suppliers")
+}
+
+model PurchaseOrder {
+  id         String @id @db.Uuid
+  branchId   String @map("branch_id") @db.Uuid
+  supplierId String @map("supplier_id") @db.Uuid
+  status     String
+  branch     Branch @relation(fields: [branchId], references: [id])
+  supplier   Supplier @relation(fields: [branchId, supplierId], references: [branchId, id])
+  lines      PurchaseOrderLine[]
+  receipts   GoodsReceipt[]
+
+  @@unique([branchId, id])
+  @@map("purchase_orders")
+}
+
+model PurchaseOrderLine {
+  id              String  @id @db.Uuid
+  branchId        String  @map("branch_id") @db.Uuid
+  purchaseOrderId String  @map("purchase_order_id") @db.Uuid
+  inventoryItemId String  @map("inventory_item_id") @db.Uuid
+  orderedQty      Decimal @map("ordered_qty") @db.Decimal(18, 6)
+  purchaseOrder   PurchaseOrder @relation(fields: [branchId, purchaseOrderId], references: [branchId, id])
+
+  @@map("purchase_order_lines")
+}
+
+model GoodsReceipt {
+  id              String   @id @db.Uuid
+  branchId        String   @map("branch_id") @db.Uuid
+  purchaseOrderId String   @map("purchase_order_id") @db.Uuid
+  idempotencyKey  String   @map("idempotency_key")
+  confirmedAt     DateTime @default(now()) @map("confirmed_at") @db.Timestamptz(6)
+  purchaseOrder   PurchaseOrder @relation(fields: [branchId, purchaseOrderId], references: [branchId, id])
+  lines           GoodsReceiptLine[]
+  obligation      SupplierObligation?
+
+  @@unique([branchId, id])
+  @@unique([branchId, idempotencyKey])
+  @@map("goods_receipts")
+}
+
+model GoodsReceiptLine {
+  id              String  @id @db.Uuid
+  branchId        String  @map("branch_id") @db.Uuid
+  goodsReceiptId  String  @map("goods_receipt_id") @db.Uuid
+  inventoryItemId String  @map("inventory_item_id") @db.Uuid
+  receivedQty     Decimal @map("received_qty") @db.Decimal(18, 6)
+  unitCostMinor   BigInt  @map("unit_cost_minor")
+  goodsReceipt    GoodsReceipt @relation(fields: [branchId, goodsReceiptId], references: [branchId, id])
+
+  @@map("goods_receipt_lines")
+}
+
+model SupplierObligation {
+  id             String @id @db.Uuid
+  branchId       String @map("branch_id") @db.Uuid
+  goodsReceiptId String @unique @map("goods_receipt_id") @db.Uuid
+  amountMinor    BigInt @map("amount_minor")
+  goodsReceipt   GoodsReceipt @relation(fields: [goodsReceiptId], references: [id])
+  payments       SupplierPayment[]
+
+  @@map("supplier_obligations")
+}
+
+model SupplierPayment {
+  id           String   @id @db.Uuid
+  branchId     String   @map("branch_id") @db.Uuid
+  obligationId String   @map("obligation_id") @db.Uuid
+  amountMinor  BigInt   @map("amount_minor")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  obligation   SupplierObligation @relation(fields: [obligationId], references: [id])
+
+  @@map("supplier_payments")
+}
+
+model Expense {
+  id          String  @id @db.Uuid
+  branchId    String  @map("branch_id") @db.Uuid
+  cashShiftId String? @map("cash_shift_id") @db.Uuid
+  amountMinor BigInt  @map("amount_minor")
+  reason      String
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  branch      Branch @relation(fields: [branchId], references: [id])
+
+  @@map("expenses")
+}
+
+model CashDrawer {
+  id        String  @id @db.Uuid
+  branchId  String  @map("branch_id") @db.Uuid
+  name      String
+  labelNote String  @map("label_note")
+  active    Boolean @default(true)
+  branch    Branch @relation(fields: [branchId], references: [id])
+  shifts    CashShift[]
+
+  @@unique([branchId, id])
+  @@map("cash_drawers")
+}
+
+model CashShift {
+  id            String   @id @db.Uuid
+  branchId      String   @map("branch_id") @db.Uuid
+  cashDrawerId  String   @map("cash_drawer_id") @db.Uuid
+  cashierUserId String   @map("cashier_user_id") @db.Uuid
+  openingMinor  BigInt   @map("opening_minor")
+  status        String
+  version       Int      @default(0)
+  openedAt      DateTime @default(now()) @map("opened_at") @db.Timestamptz(6)
+  closedAt      DateTime? @map("closed_at") @db.Timestamptz(6)
+  cashDrawer    CashDrawer @relation(fields: [branchId, cashDrawerId], references: [branchId, id])
+  movements     CashMovement[]
+  counts        CashCount[]
+  close         ShiftClose?
+  payments      Payment[]
+
+  @@unique([branchId, id])
+  @@map("cash_shifts")
+}
+
+model CashMovement {
+  id           String  @id @db.Uuid
+  branchId     String  @map("branch_id") @db.Uuid
+  cashShiftId  String  @map("cash_shift_id") @db.Uuid
+  paymentId    String? @map("payment_id") @db.Uuid
+  movementType String  @map("movement_type")
+  method       String
+  amountMinor  BigInt  @map("amount_minor")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  cashShift    CashShift @relation(fields: [branchId, cashShiftId], references: [branchId, id])
+
+  @@map("cash_movements")
+}
+
+model CashCount {
+  id          String @id @db.Uuid
+  branchId    String @map("branch_id") @db.Uuid
+  cashShiftId String @map("cash_shift_id") @db.Uuid
+  method      String
+  countedMinor BigInt @map("counted_minor")
+  cashShift   CashShift @relation(fields: [branchId, cashShiftId], references: [branchId, id])
+
+  @@map("cash_counts")
+}
+
+model ShiftClose {
+  id                   String   @id @db.Uuid
+  branchId             String   @map("branch_id") @db.Uuid
+  cashShiftId          String   @unique @map("cash_shift_id") @db.Uuid
+  consolidatedDiffMinor BigInt  @map("consolidated_diff_minor")
+  closedAt             DateTime @default(now()) @map("closed_at") @db.Timestamptz(6)
+  cashShift            CashShift @relation(fields: [cashShiftId], references: [id])
+  lines                ShiftCloseLine[]
+
+  @@map("shift_closes")
+}
+
+model ShiftCloseLine {
+  id            String @id @db.Uuid
+  branchId      String @map("branch_id") @db.Uuid
+  shiftCloseId  String @map("shift_close_id") @db.Uuid
+  method        String
+  expectedMinor BigInt @map("expected_minor")
+  countedMinor  BigInt @map("counted_minor")
+  differenceMinor BigInt @map("difference_minor")
+  shiftClose    ShiftClose @relation(fields: [shiftCloseId], references: [id])
+
+  @@unique([shiftCloseId, method])
+  @@map("shift_close_lines")
+}
+
+model Customer {
+  id             String @id @db.Uuid
+  organizationId String @map("organization_id") @db.Uuid
+  branchId       String @map("branch_id") @db.Uuid
+  name           String
+  phone          String?
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  branch         Branch @relation(fields: [branchId], references: [id])
+  addresses      CustomerAddress[]
+
+  @@unique([branchId, id])
+  @@map("customers")
+}
+
+model CustomerAddress {
+  id         String @id @db.Uuid
+  customerId String @map("customer_id") @db.Uuid
+  line       String
+  neighborhood String?
+  reference  String?
+  city       String?
+  customer   Customer @relation(fields: [customerId], references: [id])
+
+  @@map("customer_addresses")
+}
+
+model Order {
+  id                String    @id @db.Uuid
+  branchId          String    @map("branch_id") @db.Uuid
+  channel           String
+  fulfillmentStatus String    @map("fulfillment_status")
+  settlementStatus  String    @map("settlement_status")
+  version           Int       @default(0)
+  openedByUserId    String    @map("opened_by_user_id") @db.Uuid
+  ownerUserId       String?   @map("owner_user_id") @db.Uuid
+  customerId        String?   @map("customer_id") @db.Uuid
+  tableSessionId    String?   @map("table_session_id") @db.Uuid
+  promisedAt        DateTime? @map("promised_at") @db.Timestamptz(6)
+  openedAt          DateTime  @default(now()) @map("opened_at") @db.Timestamptz(6)
+  closedAt          DateTime? @map("closed_at") @db.Timestamptz(6)
+  branch            Branch @relation(fields: [branchId], references: [id])
+  lines             OrderLine[]
+  charges           OrderCharge[]
+  events            OrderEvent[]
+  fulfillment       Fulfillment?
+  tickets           KitchenTicket[]
+  sales             Sale[]
+  payments          Payment[]
+
+  @@unique([branchId, id])
+  @@map("orders")
+}
+
+model OrderLine {
+  id                   String  @id @db.Uuid
+  branchId             String  @map("branch_id") @db.Uuid
+  orderId              String  @map("order_id") @db.Uuid
+  productId            String  @map("product_id") @db.Uuid
+  variantId            String? @map("variant_id") @db.Uuid
+  quantity             Decimal @db.Decimal(18, 6)
+  guestLabel           String? @map("guest_label")
+  status               String
+  inventoryEffect      String  @map("inventory_effect")
+  quotedUnitPriceMinor BigInt @map("quoted_unit_price_minor")
+  discountMinor        BigInt  @default(0) @map("discount_minor")
+  authorizerUserId     String? @map("authorizer_user_id") @db.Uuid
+  theoreticalCostMinor BigInt? @map("theoretical_cost_minor")
+  cancelReason         String? @map("cancel_reason")
+  order                Order @relation(fields: [branchId, orderId], references: [branchId, id])
+  modifiers            OrderLineModifier[]
+  reservations         StockReservation[]
+
+  @@unique([branchId, id])
+  @@map("order_lines")
+}
+
+model OrderLineModifier {
+  id           String  @id @db.Uuid
+  branchId     String  @map("branch_id") @db.Uuid
+  orderLineId  String  @map("order_line_id") @db.Uuid
+  modifierId   String  @map("modifier_id") @db.Uuid
+  quantity     Decimal @db.Decimal(18, 6)
+  priceDeltaMinor BigInt @map("price_delta_minor")
+  snapshot     Json    @default("{}")
+  orderLine    OrderLine @relation(fields: [branchId, orderLineId], references: [branchId, id])
+
+  @@map("order_line_modifiers")
+}
+
+model OrderCharge {
+  id          String @id @db.Uuid
+  branchId    String @map("branch_id") @db.Uuid
+  orderId     String @map("order_id") @db.Uuid
+  chargeType  String @map("charge_type")
+  amountMinor BigInt @map("amount_minor")
+  order       Order @relation(fields: [branchId, orderId], references: [branchId, id])
+
+  @@map("order_charges")
+}
+
+model OrderEvent {
+  id         String   @id @db.Uuid
+  branchId   String   @map("branch_id") @db.Uuid
+  orderId    String   @map("order_id") @db.Uuid
+  eventType  String   @map("event_type")
+  actorUserId String? @map("actor_user_id") @db.Uuid
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  reference  String?
+  order      Order @relation(fields: [branchId, orderId], references: [branchId, id])
+
+  @@map("order_events")
+}
+
+model Fulfillment {
+  id          String    @id @db.Uuid
+  branchId    String    @map("branch_id") @db.Uuid
+  orderId     String    @unique @map("order_id") @db.Uuid
+  kind        String
+  status      String
+  addressLine String?   @map("address_line")
+  feeMinor    BigInt?   @map("fee_minor")
+  assignee    String?
+  dispatchedAt DateTime? @map("dispatched_at") @db.Timestamptz(6)
+  completedAt  DateTime? @map("completed_at") @db.Timestamptz(6)
+  order       Order @relation(fields: [orderId], references: [id])
+
+  @@map("fulfillments")
+}
+
+model DiningRoom {
+  id       String @id @db.Uuid
+  branchId String @map("branch_id") @db.Uuid
+  name     String
+  sortOrder Int   @map("sort_order")
+  branch   Branch @relation(fields: [branchId], references: [id])
+  tables   DiningTable[]
+
+  @@unique([branchId, id])
+  @@map("dining_rooms")
+}
+
+model DiningTable {
+  id       String @id @db.Uuid
+  branchId String @map("branch_id") @db.Uuid
+  roomId   String @map("room_id") @db.Uuid
+  name     String
+  capacity Int
+  status   String
+  version  Int    @default(0)
+  room     DiningRoom @relation(fields: [branchId, roomId], references: [branchId, id])
+  sessions TableSession[]
+
+  @@unique([branchId, id])
+  @@map("dining_tables")
+}
+
+model TableSession {
+  id            String    @id @db.Uuid
+  branchId      String    @map("branch_id") @db.Uuid
+  primaryTableId String   @map("primary_table_id") @db.Uuid
+  waiterUserId  String    @map("waiter_user_id") @db.Uuid
+  guestCount    Int       @map("guest_count")
+  status        String
+  closeReason   String?   @map("close_reason")
+  openedAt      DateTime  @default(now()) @map("opened_at") @db.Timestamptz(6)
+  primaryTable  DiningTable @relation(fields: [branchId, primaryTableId], references: [branchId, id])
+  occupancies   TableOccupancy[]
+  events        TableSessionEvent[]
+
+  @@unique([branchId, id])
+  @@map("table_sessions")
+}
+
+model TableOccupancy {
+  id             String @id @db.Uuid
+  branchId       String @map("branch_id") @db.Uuid
+  tableSessionId String @map("table_session_id") @db.Uuid
+  diningTableId  String @map("dining_table_id") @db.Uuid
+  role           String
+  tableSession   TableSession @relation(fields: [branchId, tableSessionId], references: [branchId, id])
+
+  @@map("table_occupancies")
+}
+
+model TableSessionEvent {
+  id             String   @id @db.Uuid
+  branchId       String   @map("branch_id") @db.Uuid
+  tableSessionId String   @map("table_session_id") @db.Uuid
+  eventType      String   @map("event_type")
+  actorUserId    String?  @map("actor_user_id") @db.Uuid
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  tableSession   TableSession @relation(fields: [branchId, tableSessionId], references: [branchId, id])
+
+  @@map("table_session_events")
+}
+
+model PrepStation {
+  id       String  @id @db.Uuid
+  branchId String  @map("branch_id") @db.Uuid
+  name     String
+  kind     String
+  active   Boolean @default(true)
+  branch   Branch @relation(fields: [branchId], references: [id])
+  tickets  KitchenTicket[]
+
+  @@unique([branchId, id])
+  @@map("prep_stations")
+}
+
+model KitchenTicket {
+  id             String   @id @db.Uuid
+  branchId       String   @map("branch_id") @db.Uuid
+  orderId        String   @map("order_id") @db.Uuid
+  prepStationId  String   @map("prep_station_id") @db.Uuid
+  kind           String
+  sequence       Int
+  status         String
+  idempotencyKey String   @map("idempotency_key")
+  sentByUserId   String   @map("sent_by_user_id") @db.Uuid
+  sentAt         DateTime @default(now()) @map("sent_at") @db.Timestamptz(6)
+  order          Order @relation(fields: [branchId, orderId], references: [branchId, id])
+  prepStation    PrepStation @relation(fields: [branchId, prepStationId], references: [branchId, id])
+  lines          KitchenTicketLine[]
+  events         KitchenTicketEvent[]
+
+  @@unique([branchId, id])
+  @@unique([branchId, idempotencyKey])
+  @@map("kitchen_tickets")
+}
+
+model KitchenTicketLine {
+  id               String  @id @db.Uuid
+  branchId         String  @map("branch_id") @db.Uuid
+  kitchenTicketId  String  @map("kitchen_ticket_id") @db.Uuid
+  orderLineId      String  @map("order_line_id") @db.Uuid
+  quantity         Decimal @db.Decimal(18, 6)
+  nameSnapshot     String  @map("name_snapshot")
+  modifiersSnapshot Json   @default("[]") @map("modifiers_snapshot")
+  kitchenTicket    KitchenTicket @relation(fields: [branchId, kitchenTicketId], references: [branchId, id])
+
+  @@map("kitchen_ticket_lines")
+}
+
+model KitchenTicketEvent {
+  id              String   @id @db.Uuid
+  branchId        String   @map("branch_id") @db.Uuid
+  kitchenTicketId String   @map("kitchen_ticket_id") @db.Uuid
+  eventType       String   @map("event_type")
+  reason          String?
+  actorUserId     String?  @map("actor_user_id") @db.Uuid
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  kitchenTicket   KitchenTicket @relation(fields: [branchId, kitchenTicketId], references: [branchId, id])
+
+  @@map("kitchen_ticket_events")
+}
+
+model Sale {
+  id                  String   @id @db.Uuid
+  branchId            String   @map("branch_id") @db.Uuid
+  orderId             String   @map("order_id") @db.Uuid
+  status              String
+  productGrossMinor   BigInt   @map("product_gross_minor")
+  discountMinor       BigInt   @map("discount_minor")
+  taxMinor            BigInt   @map("tax_minor")
+  chargeMinor         BigInt   @map("charge_minor")
+  saleTotalMinor      BigInt   @map("sale_total_minor")
+  theoreticalCostMinor BigInt  @map("theoretical_cost_minor")
+  idempotencyKey      String   @map("idempotency_key")
+  createdByUserId     String   @map("created_by_user_id") @db.Uuid
+  postedAt            DateTime @default(now()) @map("posted_at") @db.Timestamptz(6)
+  branch              Branch @relation(fields: [branchId], references: [id])
+  order               Order @relation(fields: [branchId, orderId], references: [branchId, id])
+  lines               SaleLine[]
+  taxes               SaleTax[]
+  voidRecord          SaleVoid?
+  allocations         PaymentAllocation[]
+
+  @@unique([branchId, id])
+  @@unique([branchId, idempotencyKey])
+  @@map("sales")
+}
+
+model SaleLine {
+  id           String  @id @db.Uuid
+  branchId     String  @map("branch_id") @db.Uuid
+  saleId       String  @map("sale_id") @db.Uuid
+  orderLineId  String  @map("order_line_id") @db.Uuid
+  quantity     Decimal @db.Decimal(18, 6)
+  amountMinor  BigInt  @map("amount_minor")
+  sale         Sale @relation(fields: [branchId, saleId], references: [branchId, id])
+
+  @@map("sale_lines")
+}
+
+model SaleTax {
+  id         String @id @db.Uuid
+  branchId   String @map("branch_id") @db.Uuid
+  saleId     String @map("sale_id") @db.Uuid
+  taxCode    String @map("tax_code")
+  baseMinor  BigInt @map("base_minor")
+  rateBps    Int?   @map("rate_bps")
+  amountMinor BigInt @map("amount_minor")
+  sale       Sale @relation(fields: [branchId, saleId], references: [branchId, id])
+
+  @@map("sale_taxes")
+}
+
+model SaleVoid {
+  id               String   @id @db.Uuid
+  branchId         String   @map("branch_id") @db.Uuid
+  saleId           String   @unique @map("sale_id") @db.Uuid
+  reason           String
+  authorizerUserId String   @map("authorizer_user_id") @db.Uuid
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  sale             Sale @relation(fields: [saleId], references: [id])
+
+  @@map("sale_voids")
+}
+
+model Payment {
+  id             String  @id @db.Uuid
+  branchId       String  @map("branch_id") @db.Uuid
+  cashShiftId    String  @map("cash_shift_id") @db.Uuid
+  orderId        String  @map("order_id") @db.Uuid
+  target         String
+  method         String
+  tenderedMinor  BigInt  @map("tendered_minor")
+  appliedMinor   BigInt  @map("applied_minor")
+  tipMinor       BigInt  @map("tip_minor")
+  changeMinor    BigInt  @map("change_minor")
+  status         String
+  externalReference String? @map("external_reference")
+  idempotencyKey String  @map("idempotency_key")
+  createdByUserId String @map("created_by_user_id") @db.Uuid
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  cashShift      CashShift @relation(fields: [branchId, cashShiftId], references: [branchId, id])
+  order          Order @relation(fields: [branchId, orderId], references: [branchId, id])
+  branch         Branch @relation(fields: [branchId], references: [id])
+  allocations    PaymentAllocation[]
+  tipDistribution TipDistribution?
+
+  @@unique([branchId, id])
+  @@unique([branchId, idempotencyKey])
+  @@map("payments")
+}
+
+model PaymentAllocation {
+  id          String @id @db.Uuid
+  branchId    String @map("branch_id") @db.Uuid
+  paymentId   String @map("payment_id") @db.Uuid
+  saleId      String @map("sale_id") @db.Uuid
+  amountMinor BigInt @map("amount_minor")
+  payment     Payment @relation(fields: [branchId, paymentId], references: [branchId, id])
+  sale        Sale @relation(fields: [branchId, saleId], references: [branchId, id])
+
+  @@map("payment_allocations")
+}
+
+model TipDistribution {
+  id          String  @id @db.Uuid
+  branchId    String  @map("branch_id") @db.Uuid
+  paymentId   String  @unique @map("payment_id") @db.Uuid
+  amountMinor BigInt  @map("amount_minor")
+  method      String
+  status      String  @default("PENDING_DISTRIBUTION")
+  responsibleUserId String? @map("responsible_user_id") @db.Uuid
+  payment     Payment @relation(fields: [paymentId], references: [id])
+  adjustments TipAdjustment[]
+
+  @@map("tip_distributions")
+}
+
+model TipAdjustment {
+  id              String   @id @db.Uuid
+  branchId        String   @map("branch_id") @db.Uuid
+  tipDistributionId String @map("tip_distribution_id") @db.Uuid
+  amountMinor     BigInt   @map("amount_minor")
+  authorizerUserId String  @map("authorizer_user_id") @db.Uuid
+  reason          String
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  tipDistribution TipDistribution @relation(fields: [tipDistributionId], references: [id])
+
+  @@map("tip_adjustments")
+}
+
+model StockReservation {
+  id              String   @id @db.Uuid
+  branchId        String   @map("branch_id") @db.Uuid
+  orderLineId     String   @map("order_line_id") @db.Uuid
+  portionKey      String   @map("portion_key")
+  inventoryItemId String   @map("inventory_item_id") @db.Uuid
+  quantity        Decimal  @db.Decimal(18, 6)
+  status          String
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  orderLine       OrderLine @relation(fields: [branchId, orderLineId], references: [branchId, id])
+  inventoryItem   InventoryItem @relation(fields: [branchId, inventoryItemId], references: [branchId, id])
+
+  @@map("stock_reservations")
+}
+
+model StockMovement {
+  id              String   @id @db.Uuid
+  branchId        String   @map("branch_id") @db.Uuid
+  inventoryItemId String   @map("inventory_item_id") @db.Uuid
+  movementType    String   @map("movement_type")
+  quantity        Decimal  @db.Decimal(18, 6)
+  costMinor       BigInt?  @map("cost_minor")
+  sourceType      String   @map("source_type")
+  sourceId        String?  @map("source_id") @db.Uuid
+  idempotencyKey  String   @map("idempotency_key")
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@unique([branchId, idempotencyKey])
+  @@map("stock_movements")
+}
+
+model WasteMovement {
+  id               String   @id @db.Uuid
+  branchId         String   @map("branch_id") @db.Uuid
+  inventoryItemId  String   @map("inventory_item_id") @db.Uuid
+  quantity         Decimal  @db.Decimal(18, 6)
+  reason           String
+  origin           String
+  responsibleUserId String  @map("responsible_user_id") @db.Uuid
+  authorizerUserId String?  @map("authorizer_user_id") @db.Uuid
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@map("waste_movements")
+}
+
+model StockException {
+  id                String   @id @db.Uuid
+  branchId          String   @map("branch_id") @db.Uuid
+  inventoryItemId   String   @map("inventory_item_id") @db.Uuid
+  stockMovementId   String   @map("stock_movement_id") @db.Uuid
+  authorizerUserId  String   @map("authorizer_user_id") @db.Uuid
+  responsibleUserId String   @map("responsible_user_id") @db.Uuid
+  reason            String
+  authorizedQty     Decimal  @map("authorized_qty") @db.Decimal(18, 6)
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@map("stock_exceptions")
+}
+
+model IdempotencyRecord {
+  id          String   @id @db.Uuid
+  branchId    String   @map("branch_id") @db.Uuid
+  operation   String
+  requestKey  String   @map("request_key")
+  requestHash String   @map("request_hash")
+  status      String
+  response    Json
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  branch      Branch @relation(fields: [branchId], references: [id])
+
+  @@unique([branchId, operation, requestKey])
+  @@map("idempotency_records")
+}
+
+model TaxConfiguration {
+  id             String   @id @db.Uuid
+  branchId       String   @map("branch_id") @db.Uuid
+  priceMode      String   @map("price_mode")
+  effectiveFrom  DateTime @map("effective_from") @db.Timestamptz(6)
+  createdByUserId String  @map("created_by_user_id") @db.Uuid
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  branch         Branch @relation(fields: [branchId], references: [id])
+
+  @@map("tax_configurations")
+}
